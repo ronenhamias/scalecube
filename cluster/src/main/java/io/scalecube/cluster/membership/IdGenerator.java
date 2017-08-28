@@ -4,11 +4,12 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Random;
 import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicLong;
 
 public final class IdGenerator {
 
   private static final int DEFAULT_SIZE = 10;
-
+  private static final AtomicLong counter = new AtomicLong(0);
   /**
    * The default message digest algorithm to use if we cannot use the requested one.
    */
@@ -36,7 +37,8 @@ public final class IdGenerator {
   }
 
   public static String generateId() {
-    return generateId(DEFAULT_SIZE);
+      return ""+counter.incrementAndGet();
+   // return generateId(DEFAULT_SIZE);
   }
 
   public static String generateId(int length) {
