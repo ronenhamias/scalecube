@@ -4,11 +4,14 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import io.scalecube.cluster.Cluster;
 import io.scalecube.cluster.ClusterConfig;
+import io.scalecube.services.metrics.Metrics;
 import io.scalecube.services.routing.RoundRobinServiceRouter;
 import io.scalecube.services.routing.Router;
 import io.scalecube.transport.Address;
 import io.scalecube.transport.Transport;
 import io.scalecube.transport.TransportConfig;
+
+import com.codahale.metrics.MetricRegistry;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,6 +36,7 @@ import java.util.concurrent.CompletableFuture;
  * and ScaleCube take care for the rest of the magic. it derived and influenced by Actor model and reactive and
  * streaming patters but does not force application developers to it. ScaleCube-Services is not yet-anther RPC system in
  * the sense its is cluster aware to provide:
+ * <ul>
  * <li>location transparency and discovery of service instances.</li>
  * <li>fault tolerance using gossip and failure detection.</li>
  * <li>share nothing - fully distributed and decentralized architecture.</li>
@@ -42,49 +46,48 @@ import java.util.concurrent.CompletableFuture;
  * advantage of composing and chaining service calls and service results.</li>
  * <li>low latency</li>
  * <li>supports routing extensible strategies when selecting service end-points</li>
+ * </ul>
  * 
  * <b>basic usage example:</b>
  * 
  * <pre>
- * 
- * <b><font color="green">//Define a service interface and implement it.</font></b>
  * {@code
- *    <b>{@literal @}Service</b>
- *    <b><font color="9b0d9b">public interface</font></b> GreetingService {  
- *
- *         <b>{@literal @}ServiceMethod</b>
+ *    // Define a service interface and implement it:
+ *    &#64; Service
+ *    public interface GreetingService {
+ *         &#64; ServiceMethod
  *         CompletableFuture<String> asyncGreeting(String string);
  *     }
- *    
- *     <b><font color="9b0d9b">public class</font></b> GreetingServiceImpl implements GreetingService {
  *
- *       {@literal @}Override
- *       <b><font color="9b0d9b">public</font></b> CompletableFuture<String> asyncGreeting(String name) {
- *         <b><font color="9b0d9b">return</font></b> CompletableFuture.completedFuture(" hello to: " + name);
+ *     public class GreetingServiceImpl implements GreetingService {
+ *       &#64; Override
+ *       public CompletableFuture<String> asyncGreeting(String name) {
+ *         return CompletableFuture.completedFuture(" hello to: " + name);
  *       }
  *     }
- *     <b><font color="green">//Build a microservices cluster instance.</font></b>
+ *
+ *     // Build a microservices cluster instance:
  *     Microservices microservices = Microservices.builder()
- *       <b><font color="green">//Introduce GreetingServiceImpl pojo as a micro-service.</font></b>
- *         .services(<b><font color="9b0d9b">new</font></b> GreetingServiceImpl())
+ *          // Introduce GreetingServiceImpl pojo as a micro-service:
+ *         .services(new GreetingServiceImpl())
  *         .build();
- * 
- *     <b><font color="green">//Create microservice proxy to GreetingService.class interface.</font></b>
+ *
+ *     // Create microservice proxy to GreetingService.class interface:
  *     GreetingService service = microservices.proxy()
  *         .api(GreetingService.class)
  *         .create();
- * 
- *     <b><font color="green">//Invoke the greeting service async.</font></b>
+ *
+ *     // Invoke the greeting service async:
  *     CompletableFuture<String> future = service.asyncGreeting("joe");
- * 
- *     <b><font color="green">//handle completable success or error.</font></b>
+ *
+ *     // handle completable success or error:
  *     future.whenComplete((result, ex) -> {
- *      if (ex == <b><font color="9b0d9b">null</font></b>) {
- *        // print the greeting.
- *         System.<b><font color="9b0d9b">out</font></b>.println(result);
+ *      if (ex == null) {
+ *        // print the greeting:
+ *         System.out.println(result);
  *       } else {
- *         // print the greeting.
- *         System.<b><font color="9b0d9b">out</font></b>.println(ex);
+ *         // print the greeting:
+ *         System.out.println(ex);
  *       }
  *     });
  * }
@@ -105,18 +108,25 @@ public class Microservices {
 
   private final ServiceCommunicator sender;
 
-  private Microservices(Cluster cluster, ServiceCommunicator sender, ServicesConfig services) {
+  private Metrics metrics;
+
+  private Microservices(Cluster cluster, ServiceCommunicator sender, ServicesConfig services, Metrics metrics) {
     this.cluster = cluster;
     this.sender = sender;
-    this.serviceRegistry = new ServiceRegistryImpl(cluster, sender, services);
+    this.metrics = metrics;
+    this.serviceRegistry = new ServiceRegistryImpl(this, services, metrics);
 
-    this.proxyFactory = new ServiceProxyFactory(this);
     this.dispatcherFactory = new ServiceDispatcherFactory(serviceRegistry);
-
+    this.proxyFactory = new ServiceProxyFactory(this);
     new ServiceDispatcher(this);
+
     this.sender.listen()
         .filter(message -> message.header(ServiceHeaders.SERVICE_RESPONSE) != null)
         .subscribe(message -> ServiceResponse.handleReply(message));
+  }
+
+  public Metrics metrics() {
+    return this.metrics;
   }
 
   public Cluster cluster() {
@@ -128,7 +138,7 @@ public class Microservices {
   }
 
   private <T> T createProxy(Class<T> serviceInterface, Class<? extends Router> router, Duration timeout) {
-    return proxyFactory.createProxy(serviceInterface, router, timeout);
+    return proxyFactory.createProxy(serviceInterface, router, timeout, metrics);
   }
 
   public Collection<ServiceInstance> services() {
@@ -143,8 +153,10 @@ public class Microservices {
 
     private TransportConfig transportConfig = TransportConfig.defaultConfig();
 
+    private Metrics metrics;
+
     /**
-     * microsrrvices instance builder.
+     * Microservices instance builder.
      * 
      * @return Microservices instance.
      */
@@ -160,7 +172,7 @@ public class Microservices {
       cluster = Cluster.joinAwait(cfg);
       transportSender.cluster(cluster);
 
-      return Reflect.builder(new Microservices(cluster, transportSender, servicesConfig)).inject();
+      return Reflect.builder(new Microservices(cluster, transportSender, servicesConfig, this.metrics)).inject();
     }
 
     private ClusterConfig getClusterConfig(ServicesConfig servicesConfig, Address address) {
@@ -221,7 +233,14 @@ public class Microservices {
     }
 
     public Builder serviceTransport(TransportConfig transportConfig) {
+      checkNotNull(transportConfig);
       this.transportConfig = transportConfig;
+      return this;
+    }
+
+    public Builder metrics(MetricRegistry metrics) {
+      checkNotNull(metrics);
+      this.metrics = new Metrics(metrics);
       return this;
     }
 
@@ -239,7 +258,7 @@ public class Microservices {
 
     public ServiceCall create() {
       LOGGER.debug("create service api {} router {}", router);
-      return dispatcherFactory.createDispatcher(this.router, this.timeout);
+      return dispatcherFactory.createDispatcher(this.router, this.timeout, metrics);
     }
 
     public DispatcherContext timeout(Duration timeout) {
@@ -296,12 +315,13 @@ public class Microservices {
       this.router = router;
       return this;
     }
+
   }
 
   private static Map<String, String> metadata(ServicesConfig config) {
     Map<String, String> servicesTags = new HashMap<>();
 
-    config.getServiceConfigs().stream().forEach(serviceConfig -> {
+    config.services().stream().forEach(serviceConfig -> {
 
       serviceConfig.serviceNames().stream().forEach(name -> {
 

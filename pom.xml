@@ -4,7 +4,7 @@
 
     <groupId>io.scalecube</groupId>
     <artifactId>scalecube-parent</artifactId>
-    <version>1.0.7-SNAPSHOT</version>
+    <version>1.0.10-SNAPSHOT</version>
     <packaging>pom</packaging>
 
     <name>ScaleCube</name>
@@ -56,6 +56,7 @@
     </distributionManagement>
 
     <properties>
+        <argLine>-Xms1024m -Xmx2048m</argLine>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
@@ -63,12 +64,12 @@
         <rxjava.version>1.3.0</rxjava.version>
         <guava.version>19.0</guava.version>
         <findbugs.version>2.0.3</findbugs.version>
-        <netty.version>4.1.5.Final</netty.version>
+        <netty.version>4.1.21.Final</netty.version>
+        <socketio.version>2.3.0</socketio.version>
         <protostuff.version>1.6.0</protostuff.version>
         <protobuf.version>3.4.0</protobuf.version>
-        
-    	<argLine>-Xms1024m -Xmx2048m</argLine>
-  
+        <metrics.version>3.1.2</metrics.version>
+        <jackson-databind.version>2.9.0</jackson-databind.version>
     </properties>
 
     <modules>
@@ -78,30 +79,40 @@
         <module>benchmark</module>
         <module>examples</module>
         <module>services</module>
+        <module>utils</module>
+        <module>ipc</module>
+        <module>gateway</module>
     </modules>
 
     <dependencyManagement>
         <dependencies>
+            <!-- Slf4j -->
             <dependency>
                 <groupId>org.slf4j</groupId>
                 <artifactId>slf4j-api</artifactId>
                 <version>${slf4j.version}</version>
+            </dependency>
+
+            <!-- Rxjava -->
+            <dependency>
+                <groupId>io.reactivex</groupId>
+                <artifactId>rxjava</artifactId>
+                <version>${rxjava.version}</version>
+            </dependency>
+
+            <!-- Google -->
+            <dependency>
+                <groupId>com.google.code.findbugs</groupId>
+                <artifactId>jsr305</artifactId>
+                <version>${findbugs.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.google.guava</groupId>
                 <artifactId>guava</artifactId>
                 <version>${guava.version}</version>
             </dependency>
-            <dependency>
-                <groupId>io.reactivex</groupId>
-                <artifactId>rxjava</artifactId>
-                <version>${rxjava.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>com.google.code.findbugs</groupId>
-                <artifactId>jsr305</artifactId>
-                <version>${findbugs.version}</version>
-            </dependency>
+
+            <!-- Protostuff/Protobuf -->
             <dependency>
                 <groupId>io.protostuff</groupId>
                 <artifactId>protostuff-api</artifactId>
@@ -132,6 +143,8 @@
                 <artifactId>protobuf-java</artifactId>
                 <version>${protobuf.version}</version>
             </dependency>
+
+            <!-- Netty -->
             <dependency>
                 <groupId>io.netty</groupId>
                 <artifactId>netty-buffer</artifactId>
@@ -140,6 +153,11 @@
             <dependency>
                 <groupId>io.netty</groupId>
                 <artifactId>netty-codec</artifactId>
+                <version>${netty.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>io.netty</groupId>
+                <artifactId>netty-codec-http</artifactId>
                 <version>${netty.version}</version>
             </dependency>
             <dependency>
@@ -163,6 +181,27 @@
                 <classifier>linux-x86_64</classifier>
                 <version>${netty.version}</version>
             </dependency>
+
+            <!-- Dropwizard -->
+            <dependency>
+                <groupId>io.dropwizard.metrics</groupId>
+                <artifactId>metrics-core</artifactId>
+                <version>${metrics.version}</version>
+            </dependency>
+
+            <!-- Jackson -->
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-databind</artifactId>
+                <version>${jackson-databind.version}</version>
+            </dependency>
+
+            <!-- Socketio -->
+            <dependency>
+                <groupId>io.scalecube</groupId>
+                <artifactId>socketio</artifactId>
+                <version>${socketio.version}</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
@@ -183,7 +222,7 @@
             <plugin>
                 <groupId>org.sonatype.plugins</groupId>
                 <artifactId>nexus-staging-maven-plugin</artifactId>
-                <version>1.6.3</version>
+                <version>1.6.7</version>
                 <extensions>true</extensions>
                 <configuration>
                     <serverId>ossrh</serverId>
@@ -204,11 +243,11 @@
                     </compilerArgs>
                 </configuration>
             </plugin>
-			<plugin>
-				<groupId>org.apache.maven.plugins</groupId>
-				<artifactId>maven-surefire-plugin</artifactId>
-				<version>2.18.1</version>
-			</plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>2.18.1</version>
+            </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-checkstyle-plugin</artifactId>
@@ -233,26 +272,26 @@
                     </execution>
                 </executions>
             </plugin>
-            
-			<plugin>
-				<groupId>org.jacoco</groupId>
-				<artifactId>jacoco-maven-plugin</artifactId>
-				<version>0.7.7.201606060606</version>
-				<executions>
-					<execution>
-						<goals>
-							<goal>prepare-agent</goal>
-						</goals>
-					</execution>
-					<execution>
-						<id>report</id>
-						<phase>test</phase>
-						<goals>
-							<goal>report</goal>
-						</goals>
-					</execution>
-				</executions>
-			</plugin>
+
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.7.7.201606060606</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
 
@@ -265,7 +304,7 @@
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-gpg-plugin</artifactId>
-                        <version>1.5</version>
+                        <version>1.6</version>
                         <executions>
                             <execution>
                                 <id>sign-artifacts</id>
@@ -275,11 +314,15 @@
                                 </goals>
                             </execution>
                         </executions>
+                        <configuration>
+							<keyname>${env.GPG_KEY}</keyname>
+							<passphraseServerId>${env.GPG_KEY}</passphraseServerId>
+						</configuration>
                     </plugin>
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-source-plugin</artifactId>
-                        <version>2.2.1</version>
+                        <version>3.0.1</version>
                         <executions>
                             <execution>
                                 <id>attach-sources</id>
@@ -293,7 +336,7 @@
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-javadoc-plugin</artifactId>
-                        <version>2.9.1</version>
+                        <version>3.0.0</version>
                         <executions>
                             <execution>
                                 <id>attach-javadocs</id>
@@ -302,6 +345,7 @@
                                     <goal>jar</goal>
                                 </goals>
                                 <configuration>
+                                    <!-- XXX consider removing this: -->
                                     <additionalparam>-Xdoclint:none</additionalparam>
                                 </configuration>
                             </execution>

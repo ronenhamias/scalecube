@@ -1,5 +1,19 @@
 # Changes
 
+## 1.0.8 / 2018-02-07
+
+* Update ServiceRegistry api, expose 'methods' on ServiceInstance
+
+## 1.0.7 / 2017-12-05
+
+* Introduce ServiceCall.invokeAll service endpoints 
+* Metrics added to ServiceCall request / response / error rates KPIs 
+* Add member host/port overrides on member config
+ 
+ Shout-out:
+- Mike Barker on first contribution.
+  
+  
 ## 1.0.6 / 2017-09-20
 
 * Supports graceful shutdown of cluster member by spreading leaving notification

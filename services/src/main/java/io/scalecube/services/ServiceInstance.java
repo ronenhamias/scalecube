@@ -5,6 +5,7 @@ import io.scalecube.transport.Message;
 
 import rx.Observable;
 
+import java.util.Collection;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
@@ -24,5 +25,9 @@ public interface ServiceInstance {
 
   Address address();
 
-  boolean hasMethod(String methodName);
+  boolean methodExists(String methodName);
+
+  void checkMethodExists(String header);
+
+  Collection<String> methods();
 }
